@@ -1,0 +1,11 @@
+sqlalchemy
+requests
+pyaudio
+sounddevice
+numpy
+python-dotenv
+fastapi
+pydantic
+redis
+sarvamai
+elevenlabs
