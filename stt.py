@@ -1,3 +1,6 @@
+#The device index may vary use the code given below the get the index of your input device. 
+#import sounddevice as sd
+#print(sd.query_devices())
 from sarvamai import SarvamAI
 import pyaudio
 import io
