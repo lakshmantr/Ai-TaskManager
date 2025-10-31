@@ -90,7 +90,7 @@ def get_specific_task(tasks:str,db:Session=Depends(get_db)):
         }
         r.set(tasks,json.dumps(formatted_task))
         return{"message":"Task Found","tasks":formatted_task}
-@app.get("/Task_by_status/")
+@app.get("/get_tasks_by_status/")
 def task_by_status(time:str|None=None,
                    status:str|None=None,
                    db:Session=Depends(get_db)):

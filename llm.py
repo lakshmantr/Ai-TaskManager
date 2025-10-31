@@ -31,10 +31,10 @@ Respond only in JSON format with the following rules:
    - "task": the task being deleted
    - "time": the scheduled time (if known)
 4. If the user is **querying tasks**:
-   - If the user asks for **all tasks**, use "intent": "GetAllTasks".
-   - If the user asks about a **specific task**, use "intent": "SpecificTask" and include "task" if identifiable.
-   - If the user asks for **all tasks** with a certain status reply with intent as "GetTasksByStatus" and include time if identifiable or description if identifiable or status if identifiable.
-   - If the user asks about the **next task**, use "intent": "NextTask".
+   - If the user asks for **all tasks**, use "intent": "get_all_tasks".
+   - If the user asks about a **specific task**, use "intent": "get_specific_task" and include "task" if identifiable.
+   - If the user asks for **all tasks** with a certain status reply with intent as "get_tasks_by_status" and include time if identifiable or description if identifiable or status if identifiable.
+   - If the user asks about the **next task**, use "intent": "get_next_task".
 5.If the user's command is unclear or does not match any of the above intents, respond with:
    - "intent": "unknown"
 **Always respond strictly in JSON** with no additional text.
@@ -94,7 +94,7 @@ def get_task_intent():
             audio_generator(f"The task {result.get('task')} has been deleted successfully.")
         else:
             audio_generator("There was an error deleting the task.")
-    elif result["intent"] == "GetAllTasks":
+    elif result["intent"] == "get_all_tasks":
         response = requests.get("http://127.0.0.1:8000/get_all_tasks/")
         resllm = response.json()
         if resllm.get("message") == "No tasks found":
@@ -110,7 +110,7 @@ def get_task_intent():
                 task_list.append(task_str)
             tasks_str = " ".join(task_list)
             audio_generator(f"The tasks are as follows: {tasks_str}.")
-    elif result["intent"] == "SpecificTask":
+    elif result["intent"] == "get_specific_task":
         response = requests.get(
             "http://127.0.0.1:8000/get_specific_task/",
             params={"tasks": result.get("task")},
@@ -129,9 +129,9 @@ def get_task_intent():
                 f"and its status is {task_status}."
             )
             audio_generator(str_list)
-    elif result["intent"] == "GetTasksByStatus":
+    elif result["intent"] == "get_tasks_by_status":
         response = requests.get(
-            "http://127.0.0.1:8000/Task_by_status/",
+            "http://127.0.0.1:8000/get_tasks_by_status/",
             params={
                 "time": result.get("time"),
                 "status": result.get("status"),
@@ -147,7 +147,7 @@ def get_task_intent():
                 audio_generator(f"The tasks at {result.get('time')} are as follows: {tasks_str}.")
             elif result.get("status"):
                 audio_generator(f"The tasks with status {result.get('status')} are as follows: {tasks_str}.")
-    elif result["intent"] == "NextTask":
+    elif result["intent"] == "get_next_task":
         response = requests.get("http://127.0.0.1:8000/get_next_task/")
         resllm = response.json()
         if resllm.get("message") == "No pending tasks":
