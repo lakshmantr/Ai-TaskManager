@@ -90,7 +90,7 @@ def get_specific_task(tasks:str,db:Session=Depends(get_db)):
         }
         r.set(tasks,json.dumps(formatted_task))
         return{"message":"Task Found","tasks":formatted_task}
-@app.get("/Task_by_status/")
+@app.get("/get_tasks_by_status/")
 def task_by_status(time:str|None=None,
                    status:str|None=None,
                    db:Session=Depends(get_db)):
@@ -101,7 +101,7 @@ def task_by_status(time:str|None=None,
         query=query.filter(_models.Tasks.status==status)
     tasks=query.all()
     if not tasks:
-        return {"message":"No tasks in the specified status","tasks":[]}
+        return {"message":"Tasks not found","tasks":[]}
     else:
         formatted_tasks=[{
             "tasks":task.tasks,
@@ -111,4 +111,4 @@ def task_by_status(time:str|None=None,
         }
         for task in tasks
         ]
-        return {"message":"No tasks in the specified status","tasks":formatted_tasks}
+        return {"message":"Tasks found in the specified status","tasks":formatted_tasks}
