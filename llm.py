@@ -138,7 +138,7 @@ def get_task_intent():
             },
         )
         resllm = response.json()
-        if resllm.get("message") == "Task not found":
+        if resllm.get("message") == "Tasks not found":
             audio_generator("There are no tasks under the status you provided.")
         else:
             task_list = resllm["tasks"]

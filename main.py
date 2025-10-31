@@ -101,7 +101,7 @@ def task_by_status(time:str|None=None,
         query=query.filter(_models.Tasks.status==status)
     tasks=query.all()
     if not tasks:
-        return {"message":"No tasks in the specified status","tasks":[]}
+        return {"message":"Tasks not found","tasks":[]}
     else:
         formatted_tasks=[{
             "tasks":task.tasks,
@@ -111,4 +111,4 @@ def task_by_status(time:str|None=None,
         }
         for task in tasks
         ]
-        return {"message":"No tasks in the specified status","tasks":formatted_tasks}
+        return {"message":"Tasks found in the specified status","tasks":formatted_tasks}
