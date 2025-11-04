@@ -1,114 +1,119 @@
-from fastapi import FastAPI,Depends
+from fastapi import FastAPI,WebSocket
 import _models
-from sqlalchemy.orm import Session
 from database import engine,Sessionlocal
-from pydantic import BaseModel
 import redis
 import json
+import sys
 app=FastAPI()
 r=redis.Redis(host="localhost",port=6379,db=0,decode_responses=True)
 _models.Base.metadata.create_all(bind=engine)
-class TaskRequestValidation(BaseModel):
-    id:int|None=None
-    tasks:str
-    time:str|None=None
-    description:str|None=None
-    status:str|None=None
-    class Config:
-        orm_mode = True
 def get_db():
     db = Sessionlocal()
     try:
         yield db
     finally:
         db.close()
-@app.post("/add_task/")
-def add_task(task:TaskRequestValidation,db:Session=Depends(get_db)):
-    db.add(_models.Tasks(**task.model_dump()))
-    db.commit()
-    return {"message":"Task added successfully"}
-@app.put("/update_task/")
-def update_task(task: TaskRequestValidation, db: Session = Depends(get_db)):
-    db_task = db.query(_models.Tasks).filter(_models.Tasks.tasks== task.tasks).first()
-    if not db_task:
-        return {"message":"Invalid Request"}
-    for key, value in task.model_dump().items():
-        if value is not None:
-            setattr(db_task, key, value)
-    db.commit()
-    return {"message":"Task updated successfully"}
-@app.delete("/delete_task/")
-def delete_task(tasks:str,db:Session=Depends(get_db)):
-    db_products=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
-    if db_products:
-        db.delete(db_products)
-        db.commit()
-        return {"message":"Task deleted successfully"}
-    else:
-        return {"message":"Invalid Request"}
-@app.get("/get_all_tasks/")
-def get_all_tasks(db: Session = Depends(get_db)):
-    tasks = db.query(_models.Tasks).all()
-    if not tasks:
-        return {"message":"No tasks found","tasks":[]}
-    formatted_tasks = [
-        {
-            "tasks": task.tasks,
-            "time": task.time,
-            "description": task.description,
-            "status": task.status
-        }
-        for task in tasks
-    ]
-    return {"message": "Tasks retrieved successfully", "tasks": formatted_tasks}
-@app.get("/get_next_task/")
-def get_next_task(db: Session = Depends(get_db)):
-    task = db.query(_models.Tasks).filter(_models.Tasks.status == 'pending').first()  
-    if not task:
-        return {"message": "No pending tasks", "tasks": []}  
-    formatted_task = {
-        "tasks": task.tasks,
-        "time": task.time,
-        "description": task.description,
-        "status": task.status
-    }
-    return {"message": "Next task found", "tasks":formatted_task}
-@app.get("/get_specific_task/")
-def get_specific_task(tasks:str,db:Session=Depends(get_db)):
-    cached_task = r.get(tasks)
-    if cached_task:
-        return {"message":"Task Found","tasks":json.loads(cached_task)}
-    task=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
-    if not task:
-        return {"message":"Task not found","tasks":[]}
-    else:
-        formatted_task={
-            "tasks":task.tasks,
-            "time":task.time,
-            "description":task.description,
-            "status":task.status
-        }
-        r.set(tasks,json.dumps(formatted_task))
-        return{"message":"Task Found","tasks":formatted_task}
-@app.get("/get_tasks_by_status/")
-def task_by_status(time:str|None=None,
-                   status:str|None=None,
-                   db:Session=Depends(get_db)):
-    query=db.query(_models.Tasks)
-    if time:
-        query=query.filter(_models.Tasks.time==time)
-    if status:
-        query=query.filter(_models.Tasks.status==status)
-    tasks=query.all()
-    if not tasks:
-        return {"message":"Tasks not found","tasks":[]}
-    else:
-        formatted_tasks=[{
-            "tasks":task.tasks,
-            "time":task.time,
-            "description":task.description,
-            "status":task.status
-        }
-        for task in tasks
-        ]
-        return {"message":"Tasks found in the specified status","tasks":formatted_tasks}
+def get_multiple_tasks_from_db(db_all):
+    task_list=[]
+    for task in db_all:
+                task_name = task.tasks
+                task_time = task.time or "no specific time"
+                task_desc = task.description or "no description provided"
+                task_status = task.status
+                task_str = f"{task_name} at {task_time}, about {task_desc}, and its status is {task_status}."
+                task_list.append(task_str)
+    tasks_str = " ".join(task_list)
+    return tasks_str
+@app.websocket("/ws")
+async def websocket_client(websocket: WebSocket):
+    await websocket.accept()
+    db = next(get_db())
+    while True:
+        data=await websocket.receive_text()
+        db_products=json.loads(data)
+        if db_products.get("intent")=="add_task":
+            db.add(_models.Tasks(
+                tasks=db_products.get("task"),
+                time=db_products.get("time"),
+                description=db_products.get("description"),
+                status="pending"
+            ))
+            db.commit()
+            await websocket.send_json({"message":f"The task{db_products.get('task')}has been added successfully"})
+        elif db_products.get("intent")=="update_task":
+            tasks=db_products["task"]
+            db_update=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
+            if db_update:
+                db_update.time=db_products.get("time")
+                db_update.description=db_products.get("description")
+                db_update.status=db_products.get("status")
+                db.commit()
+                await websocket.send_json({"message":f"The task{db_products.get('task')}has been updated successfully"})
+            else:
+                await websocket.send_json({"message":f"The task{db_products.get('task')}is not a valid task"})
+        elif db_products.get("intent")=="delete_task":
+            tasks=db_products["task"]
+            db_update=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
+            if db_update:
+                db.delete(db_update)
+                db.commit()
+                await websocket.send_json({"message":f"The task{db_products.get('task')}has been deleted successfully"})
+            else:
+                await websocket.send_json({"message":f"The task{db_products.get('task')}is not a valid task"})
+        elif db_products.get("intent")=="get_all_tasks":
+          db_all=db.query(_models.Tasks).all()
+          if db_all:
+            tasks_str=get_multiple_tasks_from_db(db_all)
+            await websocket.send_json({"message":f"The tasks are as follows{tasks_str}."})
+          else:
+              await websocket.send_json({"message":"There are no tasks"})
+        elif db_products.get("intent")=="get_specific_task":
+          tasks=db_products.get("task")
+          db_task=r.get(tasks)
+          if db_task:
+                db_task=json.loads(db_task)
+                await websocket.send_json({"message":f"The task is:{db_task.get('tasks')} "f"at {db_task.get('time') or "no specific time"} "f"about {db_task.get('description') or "no specific description"} "f"and it's status is {db_task.get('status')}"})
+          else:
+            db_task=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
+            if db_task:
+                db_dict = {
+                     "tasks": db_task.tasks,
+                     "time": db_task.time,
+                     "description": db_task.description,
+                     "status": db_task.status,
+                            }
+                r.setex(tasks, 3600, json.dumps(db_dict))
+                await websocket.send_json({"message":f"The task is:{db_task.tasks} "f"at {db_task.time or "no specific time"} "f"about {db_task.description or "no specific description"} "f"and it's status is {db_task.status}"})
+            else:
+                await websocket.send_json({"message":"The specified task is not valid"})
+        elif db_products.get("intent")=="get_tasks_by_status":
+            time=db_products.get("time")
+            status=db_products.get("status")    
+            description=db_products.get("description")
+            query=db.query(_models.Tasks)
+            if time:
+                query=query.filter(_models.Tasks.time==time)
+            if status:
+                query=query.filter(_models.Tasks.status==status.lower())
+            if description:
+                query=query.filter(_models.Tasks.description==description.lower())
+            db_all=query.all()
+            print(db_all)   
+            if not db_all:
+                await websocket.send_json({"message":"There are no tasks in the specified status"})
+            else:
+                tasks_str=get_multiple_tasks_from_db(db_all)
+                await websocket.send_json({"message":f"The tasks in the specified status are as follows{tasks_str}."})
+        elif db_products.get("intent")=="get_next_task":
+            db_task=db.query(_models.Tasks).filter(_models.Tasks.status=="pending").first()
+            if db_task:
+                await websocket.send_json({"message":f"The task is:{db_task.tasks} "f"at {db_task.time or "no specific time"} "f"about {db_task.description or "no description provided"} "f"and it's status is {db_task.status}"})
+            else:
+                await websocket.send_json({"message":"All tasks are completed"})
+        elif db_products.get("intent")=="stop":
+            await websocket.send_json({"message":"Stopping the task manager assistant. Goodbye!"})
+            await websocket.close()
+            sys.exit(1)
+            break
+        elif db_products.get("intent")=="unknown":
+            await websocket.send_json({"message":"I'm sorry, I couldn't understand your request. Please try again with a different command."})
