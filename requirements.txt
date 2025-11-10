@@ -9,3 +9,4 @@ pydantic
 redis
 sarvamai
 elevenlabs
+websockets
