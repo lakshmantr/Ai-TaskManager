@@ -27,6 +27,7 @@ Environment Setup
 Clone the repository using git clone <https://github.com/lakshmantr/Ai-TaskManager.git>.
 
 Create a virtual environment using python -m venv venv, then activate it using venv\Scripts\activate (Windows) or source venv/bin/activate (macOS/Linux).
+Check the comments in stt.py 
 
 Install dependencies using pip install -r requirements.txt.
 
