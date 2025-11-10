@@ -7,6 +7,7 @@ import sys
 from response import get_response
 app=FastAPI()
 r=redis.Redis(host="localhost",port=6379,db=0,decode_responses=True)
+_models.Base.metadata.drop_all(bind=engine)
 _models.Base.metadata.create_all(bind=engine)
 def get_db():
     db = Sessionlocal()
@@ -61,25 +62,32 @@ async def websocket_client(websocket: WebSocket):
         data=await websocket.receive_text()
         db_products=json.loads(data)
         if db_products.get("intent")=="add_task":
-            db.add(_models.Tasks(
-                tasks=db_products.get("task"),
-                time=db_products.get("time"),
-                description=db_products.get("description"),
-                status="pending"
-            ))
+            new_task = _models.Tasks(
+            tasks=db_products.get("task"),
+            time=db_products.get("time"),
+            description=db_products.get("description"),
+            status="pending")
+            db.add(new_task)
             db.commit()
+            db.refresh(new_task)
             await websocket.send_json({"message":get_response("add_task",True,db_products.get("task"))})
-        elif db_products.get("intent")=="update_task":
-            tasks=db_products["task"]
-            db_update=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
+        elif db_products.get("intent") == "update_task":
+            tasks = db_products["task"]
+            db_update = db.query(_models.Tasks).filter(_models.Tasks.tasks == tasks).first()
             if db_update:
-                db_update.time=db_products.get("time")
-                db_update.description=db_products.get("description")
-                db_update.status=db_products.get("status")
+                if "time" in db_products:
+                    db_update.time = db_products["time"]
+                if "description" in db_products:
+                    db_update.description = db_products["description"]
+                if "status" in db_products:
+                    db_update.status = db_products["status"]
                 db.commit()
-                await websocket.send_json({"message":get_response("update_task",True,tasks)})
+                db.refresh(db_update)
+                await websocket.send_json({
+                    "message": get_response("update_task", True, tasks)})
             else:
-                await websocket.send_json({"message":get_response("update_task",False,tasks)})
+                await websocket.send_json({
+                    "message": get_response("update_task", False, tasks)})
         elif db_products.get("intent")=="delete_task":
             tasks=db_products["task"]
             db_update=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
@@ -98,10 +106,12 @@ async def websocket_client(websocket: WebSocket):
           db_task=r.get(tasks)
           if db_task:
                 db_task=json.loads(db_task)
-                await websocket.send_json({"message":f"Here's what I found for '{db_task.tasks}': "
-                                          f"it's planned for {db_task.time or 'no specific time'}, "
-                                          f"about {db_task.description or 'no description provided'}, "
-                                          f"and right now its status is {db_task.status}."})
+                await websocket.send_json({"message": (
+                f"Here's what I found for '{db_task['tasks']}': "
+                f"it's planned for {db_task.get('time') or 'no specific time'}, "
+                f"about {db_task.get('description') or 'no description provided'}, "
+                f"and right now its status is {db_task.get('status')}."
+            )})
           else:
             db_task=db.query(_models.Tasks).filter(_models.Tasks.tasks==tasks).first()
             if db_task:
@@ -113,9 +123,9 @@ async def websocket_client(websocket: WebSocket):
                             }
                 r.setex(tasks, 3600, json.dumps(db_dict))
                 await websocket.send_json({"message":f"Here's what I found for '{db_task.tasks}': "
-                                                     f"it's planned for {db_task.time or 'no specific time'}, "
-                                                     f"about {db_task.description or 'no description provided'}, "
-                                                     f"and right now its status is {db_task.status}."})
+                                         f"it's planned for {db_task.time or 'no specific time'}, "
+                                         f"about {db_task.description or 'no description provided'}, "
+                                         f"and right now its status is {db_task.status}."})
             else:
                 await websocket.send_json({"message":"The specified task is not a valid task could you rephrase that for me?"})
         elif db_products.get("intent")=="get_tasks_by_status":
@@ -146,7 +156,6 @@ async def websocket_client(websocket: WebSocket):
         elif db_products.get("intent")=="stop":
             await websocket.send_json({"message":"Stopping the task manager assistant. Goodbye!"})
             await websocket.close()
-            sys.exit(1)
             break
         elif db_products.get("intent")=="unknown":
            await websocket.send_json({"message": get_response("invalid_input", True)})

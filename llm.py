@@ -29,7 +29,7 @@ Respond only in JSON format with the following rules:
    - "status": the new status of the task (e.g., "completed", "pending")
    - "description": any updated description (if provided)
    - "time": any updated time  (if provided,if the user says update the task so and so from this time to another time then provide just the time the task has to be updated to )
-3. If the user is **deleting a task**, include:
+3. If the user is deleting a task, include:
    - "intent": "delete_task"
    - "task": the task being deleted
    - "time": the scheduled time (if known)
@@ -59,16 +59,16 @@ def get_task_intent(transcript):
     result_text = result["choices"][0]["message"]["content"]
     return result_text
 async def websocket_client():
-    async with websockets.connect(FASTAPI_WS_URL,ping_interval=60,ping_timeout=60) as websocket:
+    async with websockets.connect(FASTAPI_WS_URL,ping_interval=120,ping_timeout=20) as websocket:
         while True:
-            user_input=get_user_input()
-            result=get_task_intent(user_input)
+            user_input=await asyncio.to_thread(get_user_input)
+            result=await asyncio.to_thread(get_task_intent,user_input)
             print(result)
             await websocket.send(result)
             response = await websocket.recv()
             response=json.loads(response)
             message=response.get("message")
-            audio_generator(message)
+            await asyncio.to_thread(audio_generator,message)
             if message=="Stopping the task manager assistant. Goodbye!":
                 break
 if __name__ == "__main__":

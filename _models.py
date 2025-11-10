@@ -7,4 +7,4 @@ class Tasks(Base):
     tasks=Column(String(255),nullable=False)
     time=Column(String(255),nullable=True,default=None)
     description=Column(Text,nullable=True,default=None)
-    status=Column(Enum('pending','completed'))  
+    status=Column(Enum('pending','completed'),nullable=False)  
